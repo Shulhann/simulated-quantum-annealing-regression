@@ -1,4 +1,0 @@
-dwave_neal==0.6.0
-networkx==3.3
-numpy==2.1.2
-scikit_learn==1.4.2

@@ -10,6 +10,10 @@ import networkx as nx
 from collections import defaultdict
 from sklearn.linear_model import LinearRegression
 
+from amplify import VariableGenerator
+from amplify import Poly
+from amplify import FixstarsClient, solve
+
 # To set a number to negative or positive value
 def multiplier(x):
     if x <= 2:
@@ -54,7 +58,7 @@ def sampling(Q):
     return sampleset
 
 # Extract the best solution
-def solve(sampleset, dim, precision, X,Y, d):
+def solve_neal(sampleset, dim, precision, d):
     distributions = []
 
     for sample, energy in sampleset.data(['sample', 'energy']):
@@ -67,16 +71,41 @@ def solve(sampleset, dim, precision, X,Y, d):
             i = x // (2 * precision)
             k = x % (2 * precision)
             wts[i] += di[x] / pow(2, k % precision) * multiplier(k)
-        if sol_no == 1:
-            Y_pred = np.matmul(X, wts)
-            err = mse(Y, Y_pred)
-            sol_no += 1
     
-    return distributions, wts, err
+    return distributions, wts
+
+def solve_fixstar(Q, dim, precision, d):
+    gen = VariableGenerator()
+    x = gen.array("Binary", dim) 
+    
+    model = Poly(0.0)
+    for (i, j), coeff in Q.items():
+        model += coeff * x[i] * x[j] if i != j else coeff * x[i]
+
+    client = FixstarsClient()
+    client.token = "AE/cM6820MJeJvPqvnxltdqlGcSDFAuP7PN"
+    client.parameters.timeout = 5000
+
+    result = solve(model, client)
+    result_best_values = result.best.values  
+
+    wts = np.array([0.0 for i in range(d)])
+    distributions = [0] * dim
+    idx = 0
+    for key, val in result_best_values.items():
+        distributions[idx] = val
+        idx+=1
+
+    for x in range(dim):
+        i = x // (2 * precision)  # which weight this bit belongs to
+        k = x % (2 * precision)   # position within this weight
+        wts[i] += distributions[x] / pow(2, k % precision) * multiplier(k)
+
+    return distributions, wts
 
 # Function to convert data to polynomial form
-def polynomialForm(X, d, dim, precision):
-    poly = PolynomialFeatures(degree=2)
+def polynomialForm(X, d, dim, precision, degree):
+    poly = PolynomialFeatures(degree=degree)
     X = poly.fit_transform(X)
     d = len(X[0])
     dim = d * (2 * precision)
