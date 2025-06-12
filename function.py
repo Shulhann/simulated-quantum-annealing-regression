@@ -3,6 +3,7 @@
 # Import necessary library
 import neal
 import numpy as np
+import pandas as pd
 from sklearn.metrics import mean_squared_error as mse
 from sklearn.preprocessing import PolynomialFeatures
 from collections import defaultdict
@@ -67,9 +68,9 @@ def generateQuboMatrix_neal(XtX, XtY, precision, d):
     return Q
 
 # Perform quantum annealing    
-def sampling(Q):
+def sampling_neal(Q):
     sampler = neal.SimulatedAnnealingSampler()
-    sampleset = sampler.sample_qubo(Q, num_reads=20, chain_strength=10)
+    sampleset = sampler.sample_qubo(Q, num_reads=20, chain_strength=10, run_time=5)
     return sampleset
 
 # Extract the best solution
@@ -132,15 +133,19 @@ def generateQuboMatrix_fixstar(XtX, XtY, dim, precision, d):
 
     return model
 
-# Extract the best solution 
-def solve_fixstar(model, dim, precision, d):
+# Perform simulated annealing
+def sampling_fixstar(model):
     client = FixstarsClient()
-    client.token = "AE/cM6820MJeJvPqvnxltdqlGcSDFAuP7PN"
+    client.token = "AE/8S2qgkdm29vrDGF5d1VfqKFK80lSSJkz"
     client.parameters.timeout = 5000
 
     result = solve(model, client)
     result_best_values = result.best.values  
 
+    return result_best_values
+
+# Extract the best solution
+def solve_fixstar(result_best_values, dim, precision, d):
     wts = np.array([0.0 for i in range(d)])
     distributions = [0] * dim
     idx = 0
@@ -155,4 +160,37 @@ def solve_fixstar(model, dim, precision, d):
 
     return distributions, wts
 
+
+# Additional functions (for testing purposes)
+def append_to_excel_enhanced(excel_filename, df_new, check_columns):
+    """
+    Parameters:
+    - excel_filename: Path to Excel file
+    - df_new: New DataFrame to append
+    - check_columns: List of columns to check for duplicates
+                    e.g., ['Dataset_Name', 'Precision', 'Degree', 'Model', 'Dataset']
+    """
+    try:
+        existing_df = pd.read_excel(excel_filename, sheet_name="Evaluation Metrics")
+    except FileNotFoundError:
+        df_new.to_excel(excel_filename, index=False, sheet_name="Evaluation Metrics")
+        print("New Excel file created with the data.")
+        return
     
+    # Create a temporary merged DataFrame for comparison
+    temp_df = existing_df[check_columns].merge(
+        df_new[check_columns], 
+        how='inner',
+        on=check_columns
+    )
+    
+    if not temp_df.empty:
+        print("Duplicate entries found based on columns:", check_columns)
+        print("The following combinations already exist:")
+        print(temp_df.drop_duplicates())
+        print("Skipping addition of duplicate data.")
+        return
+    
+    combined_df = pd.concat([existing_df, df_new], ignore_index=True)
+    combined_df.to_excel(excel_filename, index=False, sheet_name="Evaluation Metrics")
+    print("Data successfully appended to Excel file.")
